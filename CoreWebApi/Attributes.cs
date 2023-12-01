@@ -3,7 +3,7 @@
 namespace BeSwarm.CoreWebApi;
 
     //
-    // validation fiels
+    // validation fields
     //
     // not null control for object
     //
