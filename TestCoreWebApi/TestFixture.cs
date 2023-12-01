@@ -24,7 +24,7 @@ namespace TestCoreWebApi
 		private void Init()
 		{
 			var builder = WebApplication.CreateBuilder();
-			builder.Services.AddCoreWebApiServices(@"D:\Developpement\beswarm\Common\CoreWebApi\TestCoreWebApi\config.json");
+			builder.Services.AddCoreWebApiServices(@"e:\Dev\beswarm\Common\CoreWebApi\TestCoreWebApi\config.json");
 			provider = CoreEnvironment.services.BuildServiceProvider();
 
 

@@ -14,6 +14,11 @@ using BeSwarm.CoreWebApi;
 using BeSwarm.CoreWebApi.Services.DataBase;
 using BeSwarm.CoreWebApi.Services.Errors;
 using System.Collections;
+using Elasticsearch.Net;
+using Microsoft.AspNetCore.Http.HttpResults;
+using Polly.Retry;
+using Polly;
+using Microsoft.IdentityModel.Abstractions;
 
 namespace BeSwarm.WebApi.Core.DBStorage
 {
@@ -93,11 +98,14 @@ namespace BeSwarm.WebApi.Core.DBStorage
         IDispatchCriticalInternalError dispatch_error;
        
         public SessionsMongoDB sessions;
-
+        AsyncRetryPolicy policy;
+        IClientSessionHandle transaction = null;
         public DBStorageEngineMongoDB(SessionsMongoDB _sessions, IDispatchCriticalInternalError _dispatch_error)
         {
             dispatch_error = _dispatch_error;
             sessions = _sessions;
+            policy = Policy.Handle<Exception>().WaitAndRetryAsync(new[] { TimeSpan.FromMilliseconds(50), TimeSpan.FromMilliseconds(200), TimeSpan.FromMilliseconds(500) });
+
         }
 
         public string GetType()
@@ -111,180 +119,300 @@ namespace BeSwarm.WebApi.Core.DBStorage
         }
 
 
-		public async Task<ResultAction> AddOrUpdateNode<T>(T node, Filters query, string sessionid)
+		public async Task<ResultAction> Update<T>(T node, Filters query, string sessionid)
+        {
+            ResultAction result = new();
+            try
+            {   
+                await policy.ExecuteAsync(async () =>
+                {
+
+                    ResultAction<IMongoDatabase> session = sessions.GetSession(sessionid);
+                    result.CopyStatusFrom(session);
+                    if (result.IsOk)
+                    {
+                        IMongoCollection<BsonDocument> collection = session.datas.GetCollection<BsonDocument>(CollectionName.GetName(node));
+                        ResultAction<BsonDocument> doc = await GetBsonDocument(node);
+                        if (doc.IsOk)
+                        {
+
+                            var filter = GetQueryFromFilters(query);
+                            BsonDocument create = new();
+                            create.AddRange(new BsonDocument("$set", doc.datas));
+                            if (transaction == null)
+                            {
+                                var res = await collection.UpdateOneAsync(filter, create, new() { IsUpsert = false });
+                            }
+                            else
+                            {
+                                var res = await collection.UpdateOneAsync(transaction, filter, create, new() { IsUpsert = false});
+                            }
+
+                        }
+                    }
+                });
+             }
+            catch (Exception e)
+            {
+                string id = await dispatch_error.DispatchCritical(e, "");
+                result.SetError(new InternalError($"internalerror:{id.ToString()}"), StatusAction.internalerror);
+            }
+            return result;
+        }
+        public async Task<ResultAction> AddOrUpdate<T>(T node, Filters query, string sessionid)
         {
             ResultAction result = new();
             try
             {
-                ResultAction<IMongoDatabase> session = sessions.GetSession(sessionid);
-                result.CopyStatusFrom(session);
-                if (!result.IsOk) return result;
-				IMongoCollection<BsonDocument> collection =session.datas.GetCollection<BsonDocument>(CollectionName.GetName(node));
-                ResultAction<BsonDocument> doc = await GetBsonDocument(node);
-                if (doc.IsOk == false)
+                await policy.ExecuteAsync(async () =>
                 {
-                    result.CopyStatusFrom(doc);
-                    return result;
-                }
 
-				var filter = GetQueryFromFilters(query);
-				BsonDocument res = await collection.FindOneAndUpdateAsync(filter, doc.datas);
-                if (res == null) await collection.InsertOneAsync(doc.datas);
+                    ResultAction<IMongoDatabase> session = sessions.GetSession(sessionid);
+                    result.CopyStatusFrom(session);
+                    if (result.IsOk)
+                    {
+                        IMongoCollection<BsonDocument> collection = session.datas.GetCollection<BsonDocument>(CollectionName.GetName(node));
+                        ResultAction<BsonDocument> doc = await GetBsonDocument(node);
+                        if (doc.IsOk)
+                        {
+
+                            var filter = GetQueryFromFilters(query);
+                            BsonDocument create = new();
+                            create.AddRange(new BsonDocument("$set", doc.datas));
+                            if (transaction == null)
+                            {
+                                var res = await collection.UpdateOneAsync(filter, create, new() { IsUpsert = true });
+                            }
+                            else
+                            {
+                                var res = await collection.UpdateOneAsync(transaction, filter, create, new() { IsUpsert = true });
+                            }
+
+                        }
+                    }
+                });
             }
             catch (Exception e)
             {
-                string id = await dispatch_error.Dispatch(e, "");
+                string id = await dispatch_error.DispatchCritical(e, "");
                 result.SetError(new InternalError($"internalerror:{id.ToString()}"), StatusAction.internalerror);
             }
-
             return result;
         }
-
-        public async Task<ResultAction> AddIfNotExistNode<T>(T node, Filters query, string sessionid)
+        public async Task<ResultAction> Add<T>(T node, string sessionid)
         {
             ResultAction result = new();
             try
             {
-				ResultAction<IMongoDatabase> session = sessions.GetSession(sessionid);
-				result.CopyStatusFrom(session);
-				if (!result.IsOk) return result;
-				IMongoCollection<BsonDocument> collection =session.datas.GetCollection<BsonDocument>(CollectionName.GetName(node));
-				var filter = GetQueryFromFilters(query);
-				var found = await collection.FindSync(filter).ToListAsync();
-                if (found.Count == 1)
+                await policy.ExecuteAsync(async () =>
                 {
-                    result.SetError(new InternalError("already exist", -1), StatusAction.logicalerror);
-                    return result;
-                }
 
-                ResultAction<BsonDocument> doc = await GetBsonDocument(node);
-                if (!doc.IsOk)
-                {
-                    result.CopyStatusFrom(doc);
-                    return result;
-                }
+                    ResultAction<IMongoDatabase> session = sessions.GetSession(sessionid);
+                    result.CopyStatusFrom(session);
+                    if (result.IsOk)
+                    {
+                        IMongoCollection<BsonDocument> collection = session.datas.GetCollection<BsonDocument>(CollectionName.GetName(node));
+                        ResultAction<BsonDocument> doc = await GetBsonDocument(node);
+                        if (doc.IsOk)
+                        {
 
-                await collection.InsertOneAsync(doc.datas);
+                            BsonDocument create = new();
+                            create.AddRange(new BsonDocument(doc.datas));
+                            if (transaction == null)
+                            {
+                                await collection.InsertOneAsync( create);
+                            }
+                            else
+                            {
+                                await collection.InsertOneAsync(transaction, create);
+                            }
+
+                        }
+                    }
+                });
             }
             catch (Exception e)
             {
-                string id = await dispatch_error.Dispatch(e);
+                string id = await dispatch_error.DispatchCritical(e, "");
                 result.SetError(new InternalError($"internalerror:{id.ToString()}"), StatusAction.internalerror);
             }
-
             return result;
         }
-        public async Task<ResultAction<List<T>>> GetNodes<T>(string collectionname,Filters query, string sessionid)
+        public async Task<ResultAction> AddIfNotExist<T>(T node, Filters query, string sessionid)
+        {
+            ResultAction result = new();
+            try
+            {
+                await policy.ExecuteAsync(async () =>
+                {
+
+                    ResultAction<IMongoDatabase> session = sessions.GetSession(sessionid);
+                    result.CopyStatusFrom(session);
+                    if (result.IsOk)
+                    {
+                        IMongoCollection<BsonDocument> collection = session.datas.GetCollection<BsonDocument>(CollectionName.GetName(node));
+                        var filter = GetQueryFromFilters(query);
+                        ResultAction<BsonDocument> doc = await GetBsonDocument(node);
+                        if (doc.IsOk)
+                        {
+                            ReplaceOptions replace = new();
+                            replace.IsUpsert = true;
+                            BsonDocument create = new();
+                            create.AddRange(new BsonDocument("$setOnInsert", doc.datas));
+                            if (transaction == null)
+                            {
+                                var res = await collection.UpdateOneAsync(filter, create, new() { IsUpsert = true });
+                            }
+                            else
+                            {
+                                var res = await collection.UpdateOneAsync(transaction,filter, create, new() { IsUpsert = true });
+                            }
+                        }
+                    }
+                });
+               
+            }
+            catch (Exception e)
+            {
+                string id = await dispatch_error.DispatchCritical(e);
+                result.SetError(new InternalError($"internalerror:{id.ToString()}"), StatusAction.internalerror);
+            }
+            return result;
+        }
+        public async Task<ResultAction<List<T>>> GetItems<T>(string collectionname,Filters query, string sessionid)
         {
 	        ResultAction<List<T>> result = new();
 	        ResultAction<T> res;
 	        try
 	        {
-		        ResultAction<IMongoDatabase> session = sessions.GetSession(sessionid);
-		        result.CopyStatusFrom(session);
-		        if (!result.IsOk) return result;
+                await policy.ExecuteAsync(async () =>
+                {
 
-		        IMongoCollection<BsonDocument> collection = session.datas.GetCollection<BsonDocument>(collectionname);
-				var filter = GetQueryFromFilters(query);
-				var found = await collection.FindSync(filter).ToListAsync();
-		        if (found.Count() >= 1)
-		        {
-			        foreach (var item in found)
-			        {
-				        res = await GetNodeFromBSonDocument<T>(item);
-				        if (!res.IsOk)
-				        {
-					        result.CopyStatusFrom(res);
-					        result.datas.Clear();
-					        return result;
-				        }
-				        else result.datas.Add(res.datas);
-			        }
-		        }
-		        else
-		        {
-			        result.status = StatusAction.notfound;
-		        }
+                    ResultAction<IMongoDatabase> session = sessions.GetSession(sessionid);
+                    result.CopyStatusFrom(session);
+                    if (result.IsOk)
+                    {
+
+                        IMongoCollection<BsonDocument> collection = session.datas.GetCollection<BsonDocument>(collectionname);
+                        var filter = GetQueryFromFilters(query);
+                        var found = await collection.FindSync(filter).ToListAsync();
+                        if (found.Count() >= 1)
+                        {
+                            foreach (var item in found)
+                            {
+                                res = await GetNodeFromBSonDocument<T>(item);
+                                if (!res.IsOk)
+                                {
+                                    result.CopyStatusFrom(res);
+                                    result.datas.Clear();
+                                }
+                                else result.datas.Add(res.datas);
+                            }
+                        }
+                        else
+                        {
+                            result.status = StatusAction.notfound;
+                        }
+                    }
+                });
 	        }
 	        catch (Exception e)
 	        {
-		        string id = await dispatch_error.Dispatch(e);
+		        string id = await dispatch_error.DispatchCritical(e);
 		        result.SetError(new InternalError($"internalerror:{id.ToString()}"), StatusAction.internalerror);
 	        }
 
 	        return result;
         }
-        public async Task<ResultAction<T>> GetNode<T>(string collectionname, Filters query, string sessionid)
+        public async Task<ResultAction<T>> GetItem<T>(string collectionname, Filters query, string sessionid)
         {
 	        ResultAction<T> result=new();
 	        try
 	        {
-		        ResultAction<IMongoDatabase> session = sessions.GetSession(sessionid);
-		        result.CopyStatusFrom(session);
-		        if (!result.IsOk) return result;
+                await policy.ExecuteAsync(async () =>
+                {
 
-		        IMongoCollection<BsonDocument> collection = session.datas.GetCollection<BsonDocument>(collectionname);
-		        var filter = GetQueryFromFilters(query);
-		        var found = await collection.FindSync(filter).ToListAsync();
-		        if (found.Count() == 1)
-		        {
-			         result = await GetNodeFromBSonDocument<T>(found[0]);
-		        }
-		        else
-		        {
-			        result.status = StatusAction.notfound;
-		        }
+                    ResultAction<IMongoDatabase> session = sessions.GetSession(sessionid);
+                    result.CopyStatusFrom(session);
+                    if (result.IsOk)
+                    {
+
+                        IMongoCollection<BsonDocument> collection = session.datas.GetCollection<BsonDocument>(collectionname);
+                        var filter = GetQueryFromFilters(query);
+                        var found = await collection.FindSync(filter).ToListAsync();
+                        if (found.Count() == 1)
+                        {
+                            result = await GetNodeFromBSonDocument<T>(found[0]);
+                        }
+                        else
+                        {
+                            result.status = StatusAction.notfound;
+                        }
+                    }
+                });
 	        }
 	        catch (Exception e)
 	        {
-		        string id = await dispatch_error.Dispatch(e);
+		        string id = await dispatch_error.DispatchCritical(e);
 		        result.SetError(new InternalError($"internalerror:{id.ToString()}"), StatusAction.internalerror);
 	        }
 
 	        return result;
         }
 
-		public async Task<ResultAction> NodesExists(string collectionname, Filters query, string sessionid)
+		public async Task<ResultAction> Exists(string collectionname, Filters query, string sessionid)
         {
 	        ResultAction result = new();
 	        try
 	        {
-		        ResultAction<IMongoDatabase> session = sessions.GetSession(sessionid);
-		        result.CopyStatusFrom(session);
-		        if (!result.IsOk) return result;
+                await policy.ExecuteAsync(async () =>
+                {
 
-		        IMongoCollection<BsonDocument> collection = session.datas.GetCollection<BsonDocument>(collectionname);
-				var filter = GetQueryFromFilters(query);
-				var found = await collection.FindSync(filter).ToListAsync();
-		        if (found.Count() == 0)
-		        {
-			        result.status = StatusAction.notfound;
-		        }
+                    ResultAction<IMongoDatabase> session = sessions.GetSession(sessionid);
+                    result.CopyStatusFrom(session);
+                    if (result.IsOk)
+                    {
+
+                        IMongoCollection<BsonDocument> collection = session.datas.GetCollection<BsonDocument>(collectionname);
+                        var filter = GetQueryFromFilters(query);
+                        var found = await collection.FindSync(filter).ToListAsync();
+                        if (found.Count() == 0)
+                        {
+                            result.status = StatusAction.notfound;
+                        }
+                    }
+                });
 	        }
 	        catch (Exception e)
 	        {
-		        string id = await dispatch_error.Dispatch(e);
+		        string id = await dispatch_error.DispatchCritical(e);
 		        result.SetError(new InternalError($"internalerror:{id.ToString()}"), StatusAction.internalerror);
 	        }
 
 	        return result;
         }
-        public async Task<ResultAction<long>> GetNodesCount(string collectionname, Filters query, string sessionid)
+        public async Task<ResultAction<long>> GetCount(string collectionname, Filters query, string sessionid)
         {
 	        ResultAction<long> result = new();
 	        try
 	        {
-		        ResultAction<IMongoDatabase> session = sessions.GetSession(sessionid);
-		        result.CopyStatusFrom(session);
-		        if (!result.IsOk) return result;
+                await policy.ExecuteAsync(async () =>
+                {
 
-		        IMongoCollection<BsonDocument> collection = session.datas.GetCollection<BsonDocument>(collectionname);
-				var filter = GetQueryFromFilters(query);
-				result.datas = await collection.CountDocumentsAsync(filter);
+                    ResultAction<IMongoDatabase> session = sessions.GetSession(sessionid);
+                    result.CopyStatusFrom(session);
+                    if (result.IsOk)
+                    {
+
+                        IMongoCollection<BsonDocument> collection = session.datas.GetCollection<BsonDocument>(collectionname);
+                        var filter = GetQueryFromFilters(query);
+                        result.datas = await collection.CountDocumentsAsync(filter);
+                    }
+                });
 	        }
 	        catch (Exception e)
 	        {
-		        string id = await dispatch_error.Dispatch(e);
+		        string id = await dispatch_error.DispatchCritical(e);
 		        result.SetError(new InternalError($"internalerror:{id.ToString()}"), StatusAction.internalerror);
 	        }
 
@@ -292,21 +420,35 @@ namespace BeSwarm.WebApi.Core.DBStorage
         }
 
 
-		public async Task<ResultAction> DeleteNodes(string collectionname, Filters query, string sessionid)
+		public async Task<ResultAction> Delete(string collectionname, Filters query, string sessionid)
         {
             ResultAction result = new();
             try
             {
-				ResultAction<IMongoDatabase> session = sessions.GetSession(sessionid);
-				result.CopyStatusFrom(session);
-				if (!result.IsOk) return result;
-				IMongoCollection<BsonDocument> collection =session.datas.GetCollection<BsonDocument>(collectionname);
-				var filter = GetQueryFromFilters(query);
-				await collection.DeleteOneAsync(filter);
+                await policy.ExecuteAsync(async () =>
+                {
+                    ResultAction<IMongoDatabase> session = sessions.GetSession(sessionid);
+                    result.CopyStatusFrom(session);
+                    if (result.IsOk)
+                    {
+                        IMongoCollection<BsonDocument> collection = session.datas.GetCollection<BsonDocument>(collectionname);
+                        var filter = GetQueryFromFilters(query);
+
+                        if (transaction == null)
+                        {
+                            await collection.DeleteOneAsync(filter);
+                        }
+                        else
+                        {
+                            await collection.DeleteOneAsync(transaction,filter);
+                        }
+
+                    }
+                });
             }
             catch (Exception e)
             {
-                string id = await dispatch_error.Dispatch(e);
+                string id = await dispatch_error.DispatchCritical(e);
                 result.SetError(new InternalError($"internalerror:{id.ToString()}"), StatusAction.internalerror);
             }
 
@@ -425,7 +567,7 @@ namespace BeSwarm.WebApi.Core.DBStorage
                 }
                 catch (Exception e)
                 {
-                    string id = await dispatch_error.Dispatch(e, "GetNodeFromBSonDocument");
+                    string id = await dispatch_error.DispatchCritical(e, "GetNodeFromBSonDocument");
                     res.SetError(new InternalError($"internalerror:{id.ToString()}"), StatusAction.internalerror);
                 }
             }
@@ -441,7 +583,7 @@ namespace BeSwarm.WebApi.Core.DBStorage
             }
             catch (Exception e)
             {
-                string id = await dispatch_error.Dispatch(e, "GetNodeFromBSonDocument");
+                string id = await dispatch_error.DispatchCritical(e, "GetNodeFromBSonDocument");
                 res.SetError(new InternalError($"internalerror:{id.ToString()}"), StatusAction.internalerror);
                 return res;
             }
@@ -490,7 +632,7 @@ namespace BeSwarm.WebApi.Core.DBStorage
             }
             catch (Exception e)
             {
-                string id = await dispatch_error.Dispatch(e, "SerializeNode");
+                string id = await dispatch_error.DispatchCritical(e, "SerializeNode");
                 res.SetError(new InternalError($"internalerror:{id.ToString()}"), StatusAction.internalerror);
                 return res;
             }
@@ -505,38 +647,44 @@ namespace BeSwarm.WebApi.Core.DBStorage
             ResultAction result = new();
             try
             {
-                BsonDocument key;
-                BsonDocument value;
-                string[] sp = query.Split('|');
-				ResultAction<IMongoDatabase> session = sessions.GetSession(sessionid);
-				result.CopyStatusFrom(session);
-                if (!result.IsOk) return result;
-
-				IMongoCollection<BsonDocument> collection = session.datas.GetCollection<BsonDocument>(sp[1]);
-                switch (sp[0])
+                await policy.ExecuteAsync(async () =>
                 {
-                    case "delete":
-                        key = BsonDocument.Parse($"{{ {sp[2]}}}");
-                        value = BsonDocument.Parse($"{{{sp[2]},{sp[3]}}}");
-                        await collection.DeleteManyAsync(key);
-                        break;
-                    case "addorupdate":
-                        key = BsonDocument.Parse($"{{ {sp[2]}}}");
-                        value = BsonDocument.Parse($"{{{sp[2]},{sp[3]}}}");
-                        BsonDocument exist = await collection.FindOneAndUpdateAsync(key, value);
-                        if (exist == null) await collection.InsertOneAsync(value);
-                        break;
-                    case "createindex":
-                        var cmdStr =
-                            $"{{ createIndexes: '{sp[1]}', indexes: [ {{ key: {{{sp[3]}}}, name: '{sp[2]}', unique: true }} ] }}";
-                        var cmd = BsonDocument.Parse(cmdStr);
-                        var resultd = session.datas.RunCommand<BsonDocument>(cmd);
-                        break;
-                    case "command":
-                        var cmdd = BsonDocument.Parse(sp[1]);
-                        var resultd2 = session.datas.RunCommand<BsonDocument>(cmdd);
-                        break;
-                }
+
+                    BsonDocument key;
+                    BsonDocument value;
+                    string[] sp = query.Split('|');
+                    ResultAction<IMongoDatabase> session = sessions.GetSession(sessionid);
+                    result.CopyStatusFrom(session);
+                    if (result.IsOk)
+                    {
+
+                        IMongoCollection<BsonDocument> collection = session.datas.GetCollection<BsonDocument>(sp[1]);
+                        switch (sp[0])
+                        {
+                            case "delete":
+                                key = BsonDocument.Parse($"{{ {sp[2]}}}");
+                                value = BsonDocument.Parse($"{{{sp[2]},{sp[3]}}}");
+                                await collection.DeleteManyAsync(key);
+                                break;
+                            case "addorupdate":
+                                key = BsonDocument.Parse($"{{ {sp[2]}}}");
+                                value = BsonDocument.Parse($"{{{sp[2]},{sp[3]}}}");
+                                BsonDocument exist = await collection.FindOneAndUpdateAsync(key, value);
+                                if (exist == null) await collection.InsertOneAsync(value);
+                                break;
+                            case "createindex":
+                                var cmdStr =
+                                    $"{{ createIndexes: '{sp[1]}', indexes: [ {{ key: {{{sp[3]}}}, name: '{sp[2]}', unique: true }} ] }}";
+                                var cmd = BsonDocument.Parse(cmdStr);
+                                var resultd = session.datas.RunCommand<BsonDocument>(cmd);
+                                break;
+                            case "command":
+                                var cmdd = BsonDocument.Parse(sp[1]);
+                                var resultd2 = session.datas.RunCommand<BsonDocument>(cmdd);
+                                break;
+                        }
+                    }
+                });
             }
             catch (Exception e)
             {
@@ -551,15 +699,17 @@ namespace BeSwarm.WebApi.Core.DBStorage
             ResultAction result = new();
             try
             {
-				ResultAction<IMongoDatabase> session = sessions.GetSession(sessionid);
-				result.CopyStatusFrom(session);
-				if (!result.IsOk) return result;
+                await policy.ExecuteAsync(async () =>
+                {
 
-				await session.datas.DropCollectionAsync(collectionname);
+                    ResultAction<IMongoDatabase> session = sessions.GetSession(sessionid);
+                    result.CopyStatusFrom(session);
+                    if (result.IsOk)  await session.datas.DropCollectionAsync(collectionname);
+                });
             }
             catch (Exception e)
             {
-                string id = await dispatch_error.Dispatch(e);
+                string id = await dispatch_error.DispatchCritical(e);
                 result.SetError(new InternalError($"internalerror:{id.ToString()}"), StatusAction.internalerror);
             }
 
@@ -605,6 +755,99 @@ namespace BeSwarm.WebApi.Core.DBStorage
             }
 
             return res;
+        }
+
+        public async Task<ResultAction> IncrementField(string field, int increment, string collectionname, Filters query, string sessionid)
+        {
+            ResultAction result = new();
+            try
+            {
+                await policy.ExecuteAsync(async () =>
+                {
+
+                    ResultAction<IMongoDatabase> session = sessions.GetSession(sessionid);
+                    result.CopyStatusFrom(session);
+                    if (result.IsOk)
+                    {
+                        IMongoCollection<BsonDocument> collection = session.datas.GetCollection<BsonDocument>(collectionname);
+                        var filter = GetQueryFromFilters(query);
+                        BsonDocument bincrement = new();
+                        bincrement.AddRange(new BsonDocument(field, increment));
+                        BsonDocument update2 = new();
+                        update2.AddRange(new BsonDocument("$inc", bincrement));
+                        if (transaction == null)
+                        {
+                            BsonDocument res = await collection.FindOneAndUpdateAsync(filter, update2);
+                        }
+                        else
+                        {
+                            BsonDocument res = await collection.FindOneAndUpdateAsync(transaction,filter, update2);
+                        }
+
+                    }
+                });
+            }
+            catch (Exception e)
+            {
+                string id = await dispatch_error.DispatchCritical(e, "");
+                result.SetError(new InternalError($"internalerror:{id.ToString()}"), StatusAction.internalerror);
+            }
+            return result;
+        }
+
+        async Task<IDBStorageEngine> IDBStorageEngine.BeginTransaction(string sessionid)
+        {
+            if (transaction == null)
+            {
+                ResultAction<IMongoDatabase> session = sessions.GetSession(sessionid);
+                if (session.IsOk)
+                {
+                    transaction = await session.datas.Client.StartSessionAsync();
+                    var options = new TransactionOptions(
+                readConcern: ReadConcern.Snapshot,
+                writeConcern: WriteConcern.WMajority);
+
+                    // Start a transaction
+                    transaction.StartTransaction(options);
+                    
+                }
+            }
+            return this;
+        }
+
+        async Task<ResultAction> IDBStorageEngine.CommitTransaction()
+        {
+            ResultAction res = new();
+            if(transaction == null)
+            {
+                res.SetError(new InternalError("No session transaction started"), StatusAction.internalerror);
+                return res;
+            }
+            else
+            {
+                await transaction.CommitTransactionAsync();
+            }
+            return res;
+        }
+
+        async Task<ResultAction> IDBStorageEngine.AbortTransaction()
+        {
+            ResultAction res = new();
+            if (transaction == null)
+            {
+                res.SetError(new InternalError("No session transaction started"), StatusAction.internalerror);
+                return res;
+            }
+            else
+            {
+                await transaction.AbortTransactionAsync();
+            }
+            return res;
+        }
+        void IDisposable.Dispose()
+        {
+            if (transaction != null) transaction.Dispose();
+            transaction = null;
         }
     }
 }

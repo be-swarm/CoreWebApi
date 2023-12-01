@@ -16,7 +16,7 @@ namespace BeSwarm.CoreWebApi.Services.DataBase
 			engines = _engines;
 		}
 
-		async Task<ResultAction> IDBStorageBridge.AddIfNotExistNode<T>(T node, Filters query, string sessionid)
+		async Task<ResultAction> IDBStorageBridge.AddIfNotExist<T>(T node, Filters query, string sessionid)
 		{
 			ResultAction res; ;
 			ResultAction<IDBStorageEngine> resdbengine = await GetStorageEngine(sessionid);
@@ -27,10 +27,23 @@ namespace BeSwarm.CoreWebApi.Services.DataBase
 				return res;
 			}
 
-			return await resdbengine.datas.AddIfNotExistNode(node, query,sessionid);
+			return await resdbengine.datas.AddIfNotExist(node, query,sessionid);
 		}
+        async Task<ResultAction> IDBStorageBridge.Add<T>(T node,string sessionid)
+        {
+            ResultAction res; ;
+            ResultAction<IDBStorageEngine> resdbengine = await GetStorageEngine(sessionid);
+            if (!resdbengine.IsOk)
+            {
+                res = new();
+                res.CopyStatusFrom(resdbengine);
+                return res;
+            }
 
-		async Task<ResultAction> IDBStorageBridge.AddOrUpdateNode<T>(T node, Filters query, string sessionid)
+            return await resdbengine.datas.Add(node,sessionid);
+        }
+
+        async Task<ResultAction> IDBStorageBridge.Update<T>(T node, Filters query, string sessionid)
 		{
 			ResultAction res; ;
 			ResultAction<IDBStorageEngine> resdbengine = await GetStorageEngine(sessionid);
@@ -41,10 +54,23 @@ namespace BeSwarm.CoreWebApi.Services.DataBase
 				return res;
 			}
 
-			return await resdbengine.datas.AddOrUpdateNode(node, query, sessionid);
+			return await resdbengine.datas.Update(node, query, sessionid);
 		}
+        async Task<ResultAction> IDBStorageBridge.AddOrUpdate<T>(T node, Filters query, string sessionid)
+        {
+            ResultAction res; ;
+            ResultAction<IDBStorageEngine> resdbengine = await GetStorageEngine(sessionid);
+            if (!resdbengine.IsOk)
+            {
+                res = new();
+                res.CopyStatusFrom(resdbengine);
+                return res;
+            }
 
-		async Task<ResultAction> IDBStorageBridge.DeleteNodes(string collectionname, Filters query, string sessionid)
+            return await resdbengine.datas.AddOrUpdate(node, query, sessionid);
+        }
+
+        async Task<ResultAction> IDBStorageBridge.Delete(string collectionname, Filters query, string sessionid)
 		{
 			ResultAction res; ;
 			ResultAction<IDBStorageEngine> resdbengine = await GetStorageEngine(sessionid);
@@ -54,7 +80,7 @@ namespace BeSwarm.CoreWebApi.Services.DataBase
 				res.CopyStatusFrom(resdbengine);
 				return res;
 			}
-			return await resdbengine.datas.DeleteNodes(collectionname, query, sessionid);
+			return await resdbengine.datas.Delete(collectionname, query, sessionid);
 		}
 
 		async Task<ResultAction> IDBStorageBridge.ExecuteQuery(string query, string sessionid, bool strict)
@@ -84,7 +110,7 @@ namespace BeSwarm.CoreWebApi.Services.DataBase
 			return await resdbengine.datas.ExecuteSQLScripts(dir, logger, sessionid);
 		}
 
-		async Task<ResultAction<List<T>>> IDBStorageBridge.GetNodes<T>(string collectionname, Filters query, string sessionid)
+		async Task<ResultAction<List<T>>> IDBStorageBridge.GetItems<T>(string collectionname, Filters query, string sessionid)
 		{
 			ResultAction<List<T>> res;
 			ResultAction<IDBStorageEngine> resdbengine = await GetStorageEngine(sessionid);
@@ -95,10 +121,10 @@ namespace BeSwarm.CoreWebApi.Services.DataBase
 				return res;
 			}
 
-			return await resdbengine.datas.GetNodes<T>(collectionname, query, sessionid);
+			return await resdbengine.datas.GetItems<T>(collectionname, query, sessionid);
 
 		}
-		async Task<ResultAction<T>> IDBStorageBridge.GetNode<T>(string collectionname, Filters query, string sessionid)
+		async Task<ResultAction<T>> IDBStorageBridge.GetItem<T>(string collectionname, Filters query, string sessionid)
 		{
 			ResultAction<T> res;
 			ResultAction<IDBStorageEngine> resdbengine = await GetStorageEngine(sessionid);
@@ -108,10 +134,10 @@ namespace BeSwarm.CoreWebApi.Services.DataBase
 				res.CopyStatusFrom(resdbengine);
 				return res;
 			}
-			return await resdbengine.datas.GetNode<T>(collectionname, query, sessionid);
+			return await resdbengine.datas.GetItem<T>(collectionname, query, sessionid);
 		}
 
-		async Task<ResultAction<long>> IDBStorageBridge.GetNodesCount(string collectionname, Filters query, string sessionid)
+		async Task<ResultAction<long>> IDBStorageBridge.GetCount(string collectionname, Filters query, string sessionid)
 		{
 			ResultAction<long> res=new(); 
 			ResultAction<IDBStorageEngine> resdbengine = await GetStorageEngine(sessionid);
@@ -121,7 +147,7 @@ namespace BeSwarm.CoreWebApi.Services.DataBase
 				return res;
 			}
 
-			return await resdbengine.datas.GetNodesCount(collectionname,query,sessionid);
+			return await resdbengine.datas.GetCount(collectionname,query,sessionid);
 		}
 
 		private async Task<ResultAction<IDBStorageEngine>> GetStorageEngine(string sessionid)
@@ -152,7 +178,7 @@ namespace BeSwarm.CoreWebApi.Services.DataBase
 
 		}
 
-		async Task<ResultAction> IDBStorageBridge.NodesExists(string collectionname, Filters query, string sessionid)
+		async Task<ResultAction> IDBStorageBridge.Exists(string collectionname, Filters query, string sessionid)
 		{
 			ResultAction res ;
 			ResultAction<IDBStorageEngine> resdbengine = await GetStorageEngine(sessionid);
@@ -163,7 +189,7 @@ namespace BeSwarm.CoreWebApi.Services.DataBase
 				return res;
 			}
 
-			return await resdbengine.datas.NodesExists(collectionname, query, sessionid);
+			return await resdbengine.datas.Exists(collectionname, query, sessionid);
 		}
 
 		async Task<ResultAction> IDBStorageBridge.Truncate(string collectionname, string sessionid)
@@ -180,5 +206,31 @@ namespace BeSwarm.CoreWebApi.Services.DataBase
 			return await resdbengine.datas.Truncate(collectionname, sessionid);
 
 		}
-	}
+
+        async Task<ResultAction> IDBStorageBridge.IncrementField(string field, int increment, string collectionname, Filters query, string sessionid)
+        {
+            ResultAction res;
+            ResultAction<IDBStorageEngine> resdbengine = await GetStorageEngine(sessionid);
+            if (!resdbengine.IsOk)
+            {
+                res = new();
+                res.CopyStatusFrom(resdbengine);
+                return res;
+            }
+			return await resdbengine.datas.IncrementField(field,increment,collectionname, query, sessionid);
+        }
+
+        async Task<IDBStorageEngine> IDBStorageBridge.BeginTransaction(string sessionid)
+        {
+            ResultAction<IDBStorageEngine> resdbengine = await GetStorageEngine(sessionid);
+            if (!resdbengine.IsOk)
+            {
+                return null;
+            }
+            return await resdbengine.datas.BeginTransaction(sessionid);
+
+        }
+
+       
+    }
 }

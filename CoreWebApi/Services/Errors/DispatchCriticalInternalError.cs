@@ -16,7 +16,7 @@ namespace BeSwarm.CoreWebApi.Services.Errors
         {
             logger = _logger;
         }
-        public async Task<string> Dispatch(Exception ex, string additionnalinfo = "",[CallerMemberName] string memberName = "",
+        public async Task<string> DispatchError(Exception ex, string additionnalinfo = "",[CallerMemberName] string memberName = "",
         [CallerFilePath] string sourceFilePath = "",
         [CallerLineNumber] int sourceLineNumber = 0)
         {

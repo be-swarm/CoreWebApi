@@ -67,12 +67,12 @@ namespace BeSwarm.CoreWebApi.Services.Tokens
 			ResultAction<Dictionary<string, string>> ret = new();
 			if (token is null)
 			{
-				ret.SetError(new InternalError("Token is null"), StatusAction.unauthorized);
+				ret.SetError(new InternalError("Token is null"), StatusAction.forbidden);
 				return ret;
 			}
 			if (!token.StartsWith("Bearer "))
 			{
-			   ret.SetError(new InternalError("Invalid bearer token"), StatusAction.unauthorized);
+			   ret.SetError(new InternalError("Invalid bearer token"), StatusAction.forbidden);
 			   return ret;			 
 			}
 			try
@@ -83,7 +83,7 @@ namespace BeSwarm.CoreWebApi.Services.Tokens
 				// Check Token Format
 				if (!jwtHandler.CanReadToken(stoken))
 				{
-					ret.SetError(new InternalError("Invalid JWT string token"), StatusAction.unauthorized);
+					ret.SetError(new InternalError("Invalid JWT string token"), StatusAction.forbidden);
 					return ret;
 				}
 				var tokenjwt = jwtHandler.ReadJwtToken(stoken);
@@ -93,7 +93,7 @@ namespace BeSwarm.CoreWebApi.Services.Tokens
 				string pubkey = _rsakeys.GetPublicKey(kid);
 				if (pubkey == null)
 				{
-					ret.SetError(new InternalError("unknonw kid JWT token"), StatusAction.unauthorized);
+					ret.SetError(new InternalError("unknonw kid JWT token"), StatusAction.forbidden);
 					return ret;
 				}
 				var rsaparamsverif = new RSACryptoServiceProvider();
@@ -124,11 +124,11 @@ namespace BeSwarm.CoreWebApi.Services.Tokens
 			}
 			catch (SecurityTokenValidationException e)
 			{
-				ret.SetError(new InternalError(e.Message), StatusAction.unauthorized);
+				ret.SetError(new InternalError(e.Message), StatusAction.forbidden);
 			}
 			catch (Exception ex)
 			{
-				ret.SetError(new InternalError("Invalid JWT string token"), StatusAction.unauthorized);
+				ret.SetError(new InternalError("Invalid JWT string token"), StatusAction.forbidden);
 			}
 
 
