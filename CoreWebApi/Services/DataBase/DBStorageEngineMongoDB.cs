@@ -155,7 +155,7 @@ namespace BeSwarm.WebApi.Core.DBStorage
             catch (Exception e)
             {
                 string id = await dispatch_error.DispatchCritical(e, "");
-                result.SetError(new InternalError($"internalerror:{id.ToString()}"), StatusAction.internalerror);
+                result.SetError(new InternalError($"internalerror:{id.ToString()} Error:{e.Message}"), StatusAction.internalerror);
             }
             return result;
         }
@@ -195,7 +195,7 @@ namespace BeSwarm.WebApi.Core.DBStorage
             catch (Exception e)
             {
                 string id = await dispatch_error.DispatchCritical(e, "");
-                result.SetError(new InternalError($"internalerror:{id.ToString()}"), StatusAction.internalerror);
+                result.SetError(new InternalError($"internalerror:{id.ToString()} Error:{e.Message}"), StatusAction.internalerror);
             }
             return result;
         }
@@ -234,7 +234,7 @@ namespace BeSwarm.WebApi.Core.DBStorage
             catch (Exception e)
             {
                 string id = await dispatch_error.DispatchCritical(e, "");
-                result.SetError(new InternalError($"internalerror:{id.ToString()}"), StatusAction.internalerror);
+                result.SetError(new InternalError($"internalerror:{id.ToString()} Error:{e.Message}"), StatusAction.internalerror);
             }
             return result;
         }
@@ -275,7 +275,7 @@ namespace BeSwarm.WebApi.Core.DBStorage
             catch (Exception e)
             {
                 string id = await dispatch_error.DispatchCritical(e);
-                result.SetError(new InternalError($"internalerror:{id.ToString()}"), StatusAction.internalerror);
+                result.SetError(new InternalError($"internalerror:{id.ToString()} Error:{e.Message}"), StatusAction.internalerror);
             }
             return result;
         }
@@ -319,10 +319,10 @@ namespace BeSwarm.WebApi.Core.DBStorage
 	        catch (Exception e)
 	        {
 		        string id = await dispatch_error.DispatchCritical(e);
-		        result.SetError(new InternalError($"internalerror:{id.ToString()}"), StatusAction.internalerror);
-	        }
+                result.SetError(new InternalError($"internalerror:{id.ToString()} Error:{e.Message}"), StatusAction.internalerror);
+            }
 
-	        return result;
+            return result;
         }
         public async Task<ResultAction<T>> GetItem<T>(string collectionname, Filters query, string sessionid)
         {
@@ -354,10 +354,10 @@ namespace BeSwarm.WebApi.Core.DBStorage
 	        catch (Exception e)
 	        {
 		        string id = await dispatch_error.DispatchCritical(e);
-		        result.SetError(new InternalError($"internalerror:{id.ToString()}"), StatusAction.internalerror);
-	        }
+                result.SetError(new InternalError($"internalerror:{id.ToString()} Error:{e.Message}"), StatusAction.internalerror);
+            }
 
-	        return result;
+            return result;
         }
 
 		public async Task<ResultAction> Exists(string collectionname, Filters query, string sessionid)
@@ -386,10 +386,10 @@ namespace BeSwarm.WebApi.Core.DBStorage
 	        catch (Exception e)
 	        {
 		        string id = await dispatch_error.DispatchCritical(e);
-		        result.SetError(new InternalError($"internalerror:{id.ToString()}"), StatusAction.internalerror);
-	        }
+                result.SetError(new InternalError($"internalerror:{id.ToString()} Error:{e.Message}"), StatusAction.internalerror);
+            }
 
-	        return result;
+            return result;
         }
         public async Task<ResultAction<long>> GetCount(string collectionname, Filters query, string sessionid)
         {
@@ -413,7 +413,7 @@ namespace BeSwarm.WebApi.Core.DBStorage
 	        catch (Exception e)
 	        {
 		        string id = await dispatch_error.DispatchCritical(e);
-		        result.SetError(new InternalError($"internalerror:{id.ToString()}"), StatusAction.internalerror);
+                result.SetError(new InternalError($"internalerror:{id.ToString()} Error:{e.Message}"), StatusAction.internalerror);
 	        }
 
 	        return result;
@@ -449,7 +449,7 @@ namespace BeSwarm.WebApi.Core.DBStorage
             catch (Exception e)
             {
                 string id = await dispatch_error.DispatchCritical(e);
-                result.SetError(new InternalError($"internalerror:{id.ToString()}"), StatusAction.internalerror);
+                result.SetError(new InternalError($"internalerror:{id.ToString()} Error:{e.Message}"), StatusAction.internalerror);
             }
 
             return result;
@@ -710,7 +710,7 @@ namespace BeSwarm.WebApi.Core.DBStorage
             catch (Exception e)
             {
                 string id = await dispatch_error.DispatchCritical(e);
-                result.SetError(new InternalError($"internalerror:{id.ToString()}"), StatusAction.internalerror);
+                result.SetError(new InternalError($"internalerror:{id.ToString()} Error:{e.Message}"), StatusAction.internalerror);
             }
 
             return result;
@@ -790,7 +790,7 @@ namespace BeSwarm.WebApi.Core.DBStorage
             catch (Exception e)
             {
                 string id = await dispatch_error.DispatchCritical(e, "");
-                result.SetError(new InternalError($"internalerror:{id.ToString()}"), StatusAction.internalerror);
+                result.SetError(new InternalError($"internalerror:{id.ToString()} Error:{e.Message}"), StatusAction.internalerror);
             }
             return result;
         }

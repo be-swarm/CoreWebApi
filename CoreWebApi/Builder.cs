@@ -331,10 +331,21 @@ public static class Builder
         //
         // broker kafka ?
         //
+        logger.LogInformation("configuration message broker");
         var confkafka = ConfigBuilder.BuildConfiguration<ConfigKafka>($"core.kafka", configcontent, logger);
         if (confkafka.IsError) // specified but in errror
         {
             Environment.Exit(-1);
+        }
+        if(confkafka.IsOk)
+        {
+            logger.LogInformation("broker kafka");
+            services.AddSingleton<IMessageEvent, KafkaMessageEvent>();
+        }
+        else
+        {
+            logger.LogInformation("broker internal");
+            services.AddTransient<IMessageEvent, InternalMessageEvent>();
         }
         services.AddSingleton<ConfigKafka>(confkafka.datas);
         //
@@ -354,7 +365,7 @@ public static class Builder
         services.AddScoped<IDBStorageEngine, DBStorageEngineMongoDB>();
         services.AddScoped<IDBStorageBridge, DBStorageBridge>();
 
-        services.AddSingleton<IMessageEvent, KafkaMessageEvent>();
+        
         services.AddSingleton<IMailSender, SmtpSender>();
         services.AddSingleton<IMailReader, ImapReader>();
 
