@@ -35,7 +35,7 @@ namespace BeSwarm.CoreWebApi.Services.Mails
             dispatch_error = _dispatch_error;
             policy = Policy.Handle<Exception>().WaitAndRetryAsync(new[] { TimeSpan.FromMilliseconds(50), TimeSpan.FromMilliseconds(200), TimeSpan.FromMilliseconds(500) });
         }
-        public async Task<ResultAction<ResultSmtpSender>> SendAsync(Mail mail, string messageId )
+        public async Task<ResultAction<ResultSmtpSender>> SendAsync(SendedMail mail)
         {
             ResultAction<ResultSmtpSender> res = new();
 
@@ -51,64 +51,40 @@ namespace BeSwarm.CoreWebApi.Services.Mails
                         client.Authenticate(mailConfig.userName, mailConfig.password);
 
                         var message = new MimeMessage();
-                        message.From.Add(MailboxAddress.Parse(mail.From));
-                        foreach (var item in mail.To)
+                        message.From.Add(MailboxAddress.Parse(mail.Mail.From));
+                        foreach (var item in mail.Mail.To)
                         {
                             message.To.Add(MailboxAddress.Parse(item));
                         }
-                        foreach (var item in mail.Cc)
+                        foreach (var item in mail.Mail.Cc)
                         {
                             message.Cc.Add(MailboxAddress.Parse(item));
                         }
                         var _body = new BodyBuilder();
-                        message.Subject = mail.Subject;
+                        message.Subject = mail.Mail.Subject;
 
-                        if (mail.IsHtml)
+                        if (mail.Mail.IsHtml)
                         {
-                            _body.HtmlBody = mail.Body;
+                            _body.HtmlBody = mail.Mail.Body;
                         }
                         else
                         {
-                            _body.TextBody = mail.Body;
+                            _body.TextBody = mail.Mail.Body;
                         }
-                        // conversation
-                        if (mail.Reply?.Conversation is { })
+                        if (!string.IsNullOrEmpty(mail.Mail.InRepyToMessageID))
                         {
-                            if (!string.IsNullOrEmpty(mail.Reply.InReplyTo))
+                            message.InReplyTo = mail.Mail.InRepyToMessageID;
+                            message.References.Add(mail.Mail.InRepyToMessageID);
+                        }
+                        message.MessageId = mail.MessageID;
+                        foreach (var item in mail.Mail.Attachments)
+                        {
+                            if (string.Compare(item.Encoding, "Base64", true) == 0)
                             {
-                                message.InReplyTo = mail.Reply.InReplyTo;
-                                message.References.Add(mail.Reply.InReplyTo);
+                                var bytes = Convert.FromBase64String(item.Datas);
+                                _body.Attachments.Add(item.Name, bytes, MimeKit.ContentType.Parse(item.MediaType));
                             }
-                            using (var text = new StringWriter())
-                            {
-                                text.WriteLine();
-                                if (mail.IsHtml) text.WriteLine("<br>");
-                                text.WriteLine(">-------- Conversation --------");
-                                if (mail.IsHtml) text.WriteLine("<br>");
-                                text.WriteLine($"Le {mail.Reply.Date} {mail.Reply.Sender} a écrit:");
-                                if (mail.IsHtml) text.WriteLine("<br>");
-                                using (var reader = new StringReader(mail.Reply.Conversation))
-                                {
-                                    string line;
 
-                                    while ((line = reader.ReadLine()) != null)
-                                    {
-                                        text.Write("> ");
-                                        text.WriteLine(line);
-                                        if (mail.IsHtml) text.WriteLine("<br>");
-                                    }
-                                }
-                                text.WriteLine();
-                                if (mail.IsHtml) text.WriteLine("<br>");
-                                if (mail.IsHtml) _body.HtmlBody += text.ToString();
-                                else _body.TextBody += text.ToString();
-                            }
-                        }
-                        message.MessageId = messageId;
-                        foreach (var item in mail.Attachments)
-                        {
-                            var bytes = Convert.FromBase64String(item.Base64Datas);
-                            _body.Attachments.Add(item.Name, bytes, MimeKit.ContentType.Parse(item.MediaType));
                         }
                         message.Body = _body.ToMessageBody();
                         res.datas.Satus = await client.SendAsync(message);

@@ -19,6 +19,7 @@ using Microsoft.AspNetCore.Http.HttpResults;
 using Polly.Retry;
 using Polly;
 using Microsoft.IdentityModel.Abstractions;
+using System.Text.RegularExpressions;
 
 namespace BeSwarm.WebApi.Core.DBStorage
 {
@@ -544,23 +545,23 @@ namespace BeSwarm.WebApi.Core.DBStorage
                         switch (typeCode)
                         {
                             case TypeCode.Single:
-                                Json.Append(property.Name + ":" + t.Replace(",", "."));
+                                Json.Append("\""+property.Name+ "\"" + ":" + t.Replace(",", "."));
                                 break;
                             case TypeCode.Double:
-                                Json.Append(property.Name + ":" + t.Replace(",", "."));
+                                Json.Append("\"" + property.Name + "\"" + ":" + t.Replace(",", "."));
                                 break;
                             case TypeCode.Decimal:
-                                Json.Append(property.Name + ":" + t.Replace(",", "."));
+                                Json.Append("\"" + property.Name + "\"" + ":" + t.Replace(",", "."));
                                 break;
 
                             case TypeCode.DateTime:
-                                Json.Append(property.Name + ":\"" + t + "\"");
+                                Json.Append("\"" + property.Name + "\"" + ":\"" + t + "\"");
                                 break;
                             case TypeCode.String:
-                                Json.Append(property.Name + ":\"" + t.Replace("\"", "\\\"") + "\"");
+                                Json.Append("\"" + property.Name + "\"" + ":\"" + t.Replace("\"", "\\\"") + "\"");
                                 break;
                             default:
-                                Json.Append(property.Name + ":" + t);
+                                Json.Append("\"" + property.Name + "\"" + ":" + t);
                                 break;
                         }
                     }
@@ -573,10 +574,11 @@ namespace BeSwarm.WebApi.Core.DBStorage
             }
 
             Json.Append("}");
-            string result = Json.ToString();
+            string result = Json.ToString().Replace("\\\\\"", "");
             try
             {
-                res.datas = JsonConvert.DeserializeObject<T>(Json.ToString(), new JsonSerializerSettings
+                
+                res.datas = JsonConvert.DeserializeObject<T>(result, new JsonSerializerSettings
                 {
                     DateTimeZoneHandling = DateTimeZoneHandling.Utc,
                 });
