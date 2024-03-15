@@ -30,10 +30,10 @@ namespace BeSwarm.CoreWebApi.Services.MessageEvents
     public class InternalMessageEvent : IMessageEvent
     {
 
-        IDispatchCriticalInternalError dispatch_error;
+        IDispatchError dispatch_error;
       
         ILogger<InternalMessageEvent> _logger;
-        public InternalMessageEvent(IDispatchCriticalInternalError _dispatch_error,ILogger<InternalMessageEvent> logger)
+        public InternalMessageEvent(IDispatchError _dispatch_error,ILogger<InternalMessageEvent> logger)
         {
             dispatch_error = _dispatch_error;
             _logger= logger;

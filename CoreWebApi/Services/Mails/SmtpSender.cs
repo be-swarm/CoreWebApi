@@ -27,9 +27,9 @@ namespace BeSwarm.CoreWebApi.Services.Mails
     public class SmtpSender : IMailSender
     {
         ConfigMail mailConfig;
-        IDispatchCriticalInternalError dispatch_error;
+        IDispatchError dispatch_error;
         AsyncRetryPolicy policy;
-        public SmtpSender(ConfigMail _mailConfig, IDispatchCriticalInternalError _dispatch_error)
+        public SmtpSender(ConfigMail _mailConfig, IDispatchError _dispatch_error)
         {
             mailConfig = _mailConfig;
             dispatch_error = _dispatch_error;
@@ -76,7 +76,7 @@ namespace BeSwarm.CoreWebApi.Services.Mails
                             message.InReplyTo = mail.Mail.InRepyToMessageID;
                             message.References.Add(mail.Mail.InRepyToMessageID);
                         }
-                        message.MessageId = mail.MessageID;
+                        if(!string.IsNullOrEmpty(mail.MessageID)) message.MessageId = mail.MessageID;
                         foreach (var item in mail.Mail.Attachments)
                         {
                             if (string.Compare(item.Encoding, "Base64", true) == 0)

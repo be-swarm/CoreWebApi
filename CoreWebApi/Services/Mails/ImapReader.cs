@@ -17,9 +17,9 @@ namespace BeSwarm.CoreWebApi.Services.Mails
     public class ImapReader : IMailReader
     {
         ConfigMail mailConfig;
-        IDispatchCriticalInternalError dispatch_error;
+        IDispatchError dispatch_error;
         AsyncRetryPolicy policy;
-        public ImapReader(ConfigMail _mailConfig, IDispatchCriticalInternalError _dispatch_error)
+        public ImapReader(ConfigMail _mailConfig, IDispatchError _dispatch_error)
         {
             mailConfig = _mailConfig;
             dispatch_error = _dispatch_error;

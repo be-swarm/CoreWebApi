@@ -110,21 +110,22 @@ namespace BeSwarm.CoreWebApi.Services.DataBase
 			return await resdbengine.datas.ExecuteSQLScripts(dir, logger, sessionid);
 		}
 
-		async Task<ResultAction<List<T>>> IDBStorageBridge.GetItems<T>(string collectionname, Filters query, string sessionid)
-		{
-			ResultAction<List<T>> res;
-			ResultAction<IDBStorageEngine> resdbengine = await GetStorageEngine(sessionid);
-			if (!resdbengine.IsOk)
-			{
-				res = new();
-				res.CopyStatusFrom(resdbengine);
-				return res;
-			}
+		
+        async Task<ResultAction<List<T>>> IDBStorageBridge.GetItems<T>(T node, Filters query, string sessionid)
+        {
+            ResultAction<List<T>> res;
+            ResultAction<IDBStorageEngine> resdbengine = await GetStorageEngine(sessionid);
+            if (!resdbengine.IsOk)
+            {
+                res = new();
+                res.CopyStatusFrom(resdbengine);
+                return res;
+            }
 
-			return await resdbengine.datas.GetItems<T>(collectionname, query, sessionid);
+            return await resdbengine.datas.GetItems<T>(node, query, sessionid);
 
-		}
-		async Task<ResultAction<T>> IDBStorageBridge.GetItem<T>(string collectionname, Filters query, string sessionid)
+        }
+        async Task<ResultAction<T>> IDBStorageBridge.GetItem<T>(T node, Filters query, string sessionid)
 		{
 			ResultAction<T> res;
 			ResultAction<IDBStorageEngine> resdbengine = await GetStorageEngine(sessionid);
@@ -134,7 +135,7 @@ namespace BeSwarm.CoreWebApi.Services.DataBase
 				res.CopyStatusFrom(resdbengine);
 				return res;
 			}
-			return await resdbengine.datas.GetItem<T>(collectionname, query, sessionid);
+			return await resdbengine.datas.GetItem<T>(node, query, sessionid);
 		}
 
 		async Task<ResultAction<long>> IDBStorageBridge.GetCount(string collectionname, Filters query, string sessionid)

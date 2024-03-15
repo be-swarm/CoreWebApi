@@ -11,8 +11,8 @@ public class CatchExceptionMiddleWare
     private RequestDelegate next;
     ILogger logger;
 
-    IDispatchCriticalInternalError dispatch_error;
-    public CatchExceptionMiddleWare(IDispatchCriticalInternalError _dispatch_error, ITokenService _tokenservice, RequestDelegate next, ILogger<CatchExceptionMiddleWare> _logger)
+    IDispatchError dispatch_error;
+    public CatchExceptionMiddleWare(IDispatchError _dispatch_error, ITokenService _tokenservice, RequestDelegate next, ILogger<CatchExceptionMiddleWare> _logger)
     {
         this.next = next;
         logger = _logger;

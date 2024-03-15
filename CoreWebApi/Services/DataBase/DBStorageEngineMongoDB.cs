@@ -61,8 +61,8 @@ namespace BeSwarm.WebApi.Core.DBStorage
                 }
                 else
                 {
-	                MongoClientSettings settings;
-                    if(config.port!=-1) settings = MongoClientSettings.FromConnectionString($"{config.host}:{config.port}");
+                    MongoClientSettings settings;
+                    if (config.port != -1) settings = MongoClientSettings.FromConnectionString($"{config.host}:{config.port}");
                     else settings = MongoClientSettings.FromConnectionString($"{config.host}");
                     client = new MongoClient(settings);
                 }
@@ -82,26 +82,26 @@ namespace BeSwarm.WebApi.Core.DBStorage
         }
         public ResultAction<IMongoDatabase> GetSession(string id)
         {
-	        ResultAction<IMongoDatabase> res = new();
-	        IMongoDatabase session;
-	        if (!sessions.TryGetValue(id,out session))
-	        {
-		        res.SetError(new($"GetSession  id:{id} not found in mongodb databases managed by this service"), StatusAction.logicalerror);
-		        return res;
-	        }
-	        res.datas = session;
-	        return res;
+            ResultAction<IMongoDatabase> res = new();
+            IMongoDatabase session;
+            if (!sessions.TryGetValue(id, out session))
+            {
+                res.SetError(new($"GetSession  id:{id} not found in mongodb databases managed by this service"), StatusAction.logicalerror);
+                return res;
+            }
+            res.datas = session;
+            return res;
         }
     }
 
     public class DBStorageEngineMongoDB : IDBStorageEngine
     {
-        IDispatchCriticalInternalError dispatch_error;
-       
+        IDispatchError dispatch_error;
+
         public SessionsMongoDB sessions;
         AsyncRetryPolicy policy;
         IClientSessionHandle transaction = null;
-        public DBStorageEngineMongoDB(SessionsMongoDB _sessions, IDispatchCriticalInternalError _dispatch_error)
+        public DBStorageEngineMongoDB(SessionsMongoDB _sessions, IDispatchError _dispatch_error)
         {
             dispatch_error = _dispatch_error;
             sessions = _sessions;
@@ -115,16 +115,16 @@ namespace BeSwarm.WebApi.Core.DBStorage
         }
         public bool IsForMe(string sessionid)
         {
-	        if (sessions.GetSession(sessionid) is { }) return true;
-	        return false;
+            if (sessions.GetSession(sessionid) is { }) return true;
+            return false;
         }
 
 
-		public async Task<ResultAction> Update<T>(T node, Filters query, string sessionid)
+        public async Task<ResultAction> Update<T>(T node, Filters query, string sessionid)
         {
             ResultAction result = new();
             try
-            {   
+            {
                 await policy.ExecuteAsync(async () =>
                 {
 
@@ -146,13 +146,13 @@ namespace BeSwarm.WebApi.Core.DBStorage
                             }
                             else
                             {
-                                var res = await collection.UpdateOneAsync(transaction, filter, create, new() { IsUpsert = false});
+                                var res = await collection.UpdateOneAsync(transaction, filter, create, new() { IsUpsert = false });
                             }
 
                         }
                     }
                 });
-             }
+            }
             catch (Exception e)
             {
                 string id = await dispatch_error.DispatchCritical(e, "");
@@ -221,7 +221,7 @@ namespace BeSwarm.WebApi.Core.DBStorage
                             create.AddRange(new BsonDocument(doc.datas));
                             if (transaction == null)
                             {
-                                await collection.InsertOneAsync( create);
+                                await collection.InsertOneAsync(create);
                             }
                             else
                             {
@@ -266,12 +266,12 @@ namespace BeSwarm.WebApi.Core.DBStorage
                             }
                             else
                             {
-                                var res = await collection.UpdateOneAsync(transaction,filter, create, new() { IsUpsert = true });
+                                var res = await collection.UpdateOneAsync(transaction, filter, create, new() { IsUpsert = true });
                             }
                         }
                     }
                 });
-               
+
             }
             catch (Exception e)
             {
@@ -280,12 +280,14 @@ namespace BeSwarm.WebApi.Core.DBStorage
             }
             return result;
         }
-        public async Task<ResultAction<List<T>>> GetItems<T>(string collectionname,Filters query, string sessionid)
+
+
+        public async Task<ResultAction<List<T>>> GetItems<T>(T node, Filters query, string sessionid)
         {
-	        ResultAction<List<T>> result = new();
-	        ResultAction<T> res;
-	        try
-	        {
+            ResultAction<List<T>> result = new();
+            ResultAction<T> res;
+            try
+            {
                 await policy.ExecuteAsync(async () =>
                 {
 
@@ -294,9 +296,9 @@ namespace BeSwarm.WebApi.Core.DBStorage
                     if (result.IsOk)
                     {
 
-                        IMongoCollection<BsonDocument> collection = session.datas.GetCollection<BsonDocument>(collectionname);
+                        IMongoCollection<BsonDocument> collection = session.datas.GetCollection<BsonDocument>(CollectionName.GetName(node));
                         var filter = GetQueryFromFilters(query);
-                        var found = await collection.FindSync(filter).ToListAsync();
+                        var found = await collection.Find(filter).Project(GetProjection(node.GetType())).ToListAsync();
                         if (found.Count() >= 1)
                         {
                             foreach (var item in found)
@@ -316,20 +318,51 @@ namespace BeSwarm.WebApi.Core.DBStorage
                         }
                     }
                 });
-	        }
-	        catch (Exception e)
-	        {
-		        string id = await dispatch_error.DispatchCritical(e);
+            }
+            catch (Exception e)
+            {
+                string id = await dispatch_error.DispatchCritical(e);
                 result.SetError(new InternalError($"internalerror:{id.ToString()} Error:{e.Message}"), StatusAction.internalerror);
             }
 
             return result;
         }
-        public async Task<ResultAction<T>> GetItem<T>(string collectionname, Filters query, string sessionid)
+
+
+        ProjectionDefinition<BsonDocument> GetProjection(Type type, string prefix = "", ProjectionDefinition<BsonDocument> list = null)
         {
-	        ResultAction<T> result=new();
-	        try
-	        {
+            if (list == null) list = Builders<BsonDocument>.Projection.Exclude("_id");
+            ResultAction<BsonDocument> res = new();
+            PropertyInfo[] propertyInfos = type.GetProperties();
+            foreach (PropertyInfo pi in propertyInfos)
+            {
+                string name = "";
+                if (prefix != "") name = string.Format($"{prefix}.{pi.Name}");
+                else name = pi.Name;
+                if (pi.PropertyType.IsClass && !pi.PropertyType.FullName.StartsWith("System."))
+                {
+                    list = GetProjection(pi.PropertyType, name, list);
+                }
+                else
+                {
+                    if (pi.PropertyType.Name.StartsWith("List"))
+                    {
+                        var subpi = pi.PropertyType.GetProperties().Where(t => t.Name == "Item");
+                        list = GetProjection(subpi.First().PropertyType, name, list);
+                    }
+                    else
+                    {
+                        list = list.Include(name);
+                    }
+                }
+            }
+            return list;
+        }
+        public async Task<ResultAction<T>> GetItem<T>(T node, Filters query, string sessionid)
+        {
+            ResultAction<T> result = new();
+            try
+            {
                 await policy.ExecuteAsync(async () =>
                 {
 
@@ -338,9 +371,9 @@ namespace BeSwarm.WebApi.Core.DBStorage
                     if (result.IsOk)
                     {
 
-                        IMongoCollection<BsonDocument> collection = session.datas.GetCollection<BsonDocument>(collectionname);
+                        IMongoCollection<BsonDocument> collection = session.datas.GetCollection<BsonDocument>(CollectionName.GetName(node));
                         var filter = GetQueryFromFilters(query);
-                        var found = await collection.FindSync(filter).ToListAsync();
+                        var found = await collection.Find(filter).Project(GetProjection(node.GetType())).ToListAsync();
                         if (found.Count() == 1)
                         {
                             result = await GetNodeFromBSonDocument<T>(found[0]);
@@ -351,21 +384,21 @@ namespace BeSwarm.WebApi.Core.DBStorage
                         }
                     }
                 });
-	        }
-	        catch (Exception e)
-	        {
-		        string id = await dispatch_error.DispatchCritical(e);
+            }
+            catch (Exception e)
+            {
+                string id = await dispatch_error.DispatchCritical(e);
                 result.SetError(new InternalError($"internalerror:{id.ToString()} Error:{e.Message}"), StatusAction.internalerror);
             }
 
             return result;
         }
 
-		public async Task<ResultAction> Exists(string collectionname, Filters query, string sessionid)
+        public async Task<ResultAction> Exists(string collectionname, Filters query, string sessionid)
         {
-	        ResultAction result = new();
-	        try
-	        {
+            ResultAction result = new();
+            try
+            {
                 await policy.ExecuteAsync(async () =>
                 {
 
@@ -383,10 +416,10 @@ namespace BeSwarm.WebApi.Core.DBStorage
                         }
                     }
                 });
-	        }
-	        catch (Exception e)
-	        {
-		        string id = await dispatch_error.DispatchCritical(e);
+            }
+            catch (Exception e)
+            {
+                string id = await dispatch_error.DispatchCritical(e);
                 result.SetError(new InternalError($"internalerror:{id.ToString()} Error:{e.Message}"), StatusAction.internalerror);
             }
 
@@ -394,9 +427,9 @@ namespace BeSwarm.WebApi.Core.DBStorage
         }
         public async Task<ResultAction<long>> GetCount(string collectionname, Filters query, string sessionid)
         {
-	        ResultAction<long> result = new();
-	        try
-	        {
+            ResultAction<long> result = new();
+            try
+            {
                 await policy.ExecuteAsync(async () =>
                 {
 
@@ -410,18 +443,18 @@ namespace BeSwarm.WebApi.Core.DBStorage
                         result.datas = await collection.CountDocumentsAsync(filter);
                     }
                 });
-	        }
-	        catch (Exception e)
-	        {
-		        string id = await dispatch_error.DispatchCritical(e);
+            }
+            catch (Exception e)
+            {
+                string id = await dispatch_error.DispatchCritical(e);
                 result.SetError(new InternalError($"internalerror:{id.ToString()} Error:{e.Message}"), StatusAction.internalerror);
-	        }
+            }
 
-	        return result;
+            return result;
         }
 
 
-		public async Task<ResultAction> Delete(string collectionname, Filters query, string sessionid)
+        public async Task<ResultAction> Delete(string collectionname, Filters query, string sessionid)
         {
             ResultAction result = new();
             try
@@ -441,7 +474,7 @@ namespace BeSwarm.WebApi.Core.DBStorage
                         }
                         else
                         {
-                            await collection.DeleteOneAsync(transaction,filter);
+                            await collection.DeleteOneAsync(transaction, filter);
                         }
 
                     }
@@ -455,12 +488,13 @@ namespace BeSwarm.WebApi.Core.DBStorage
 
             return result;
         }
-        
+
         private BsonDocument GetQueryFromFilters(Filters Query)
         {
             BsonDocument find = null;
             if (Query is { })
-            {  find=new();
+            {
+                find = new();
                 foreach (var item in Query.filters)
                 {
                     BsonDocument query = new();
@@ -493,7 +527,7 @@ namespace BeSwarm.WebApi.Core.DBStorage
                         switch (typeCode)
                         {
                             case TypeCode.DateTime:
-                                query.AddRange(new BsonDocument(op, (DateTime) item2.Value));
+                                query.AddRange(new BsonDocument(op, (DateTime)item2.Value));
                                 break;
                             case TypeCode.String:
                                 query.AddRange(new BsonDocument(op, item2.Value.ToString()));
@@ -502,9 +536,9 @@ namespace BeSwarm.WebApi.Core.DBStorage
                                 query.AddRange(new BsonDocument(op, (bool)item2.Value));
                                 break;
                             case TypeCode.Int32:
-	                            query.AddRange(new BsonDocument(op, (int)item2.Value));
-	                            break;
-							default:
+                                query.AddRange(new BsonDocument(op, (int)item2.Value));
+                                break;
+                            default:
                                 query.AddRange(new BsonDocument(op, item2.Value.ToString()));
                                 break;
                         }
@@ -517,81 +551,20 @@ namespace BeSwarm.WebApi.Core.DBStorage
 
         async Task<ResultAction<T>> GetNodeFromBSonDocument<T>(BsonDocument node)
         {
-            //string Json = "{";
-            string t = "";
-            StringBuilder Json = new StringBuilder();
-            Json.Append("{");
             ResultAction<T> res = new ResultAction<T>();
-            T obj = (T) Activator.CreateInstance(typeof(T));
-            var properties = obj.GetType().GetProperties();
-
-            foreach (var property in properties)
-            {
-                var attributes = property.GetCustomAttributes(false);
-                try
-                {
-                    BsonElement o;
-                    node.TryGetElement(property.Name, out o);
-                    if (o.Name is { } && o.Value as BsonNull == null)
-                    {
-        
-                        if (Json.Length != 1) Json.Append(",");
-                        string type = property.PropertyType.Name;
-                        t = node[property.Name].ToString();
-
-                        if (t == null) t = "";
-
-                        System.TypeCode typeCode = Type.GetTypeCode(property.PropertyType);
-                        switch (typeCode)
-                        {
-                            case TypeCode.Single:
-                                Json.Append("\""+property.Name+ "\"" + ":" + t.Replace(",", "."));
-                                break;
-                            case TypeCode.Double:
-                                Json.Append("\"" + property.Name + "\"" + ":" + t.Replace(",", "."));
-                                break;
-                            case TypeCode.Decimal:
-                                Json.Append("\"" + property.Name + "\"" + ":" + t.Replace(",", "."));
-                                break;
-
-                            case TypeCode.DateTime:
-                                Json.Append("\"" + property.Name + "\"" + ":\"" + t + "\"");
-                                break;
-                            case TypeCode.String:
-                                Json.Append("\"" + property.Name + "\"" + ":\"" + t.Replace("\"", "\\\"") + "\"");
-                                break;
-                            default:
-                                Json.Append("\"" + property.Name + "\"" + ":" + t);
-                                break;
-                        }
-                    }
-                }
-                catch (Exception e)
-                {
-                    string id = await dispatch_error.DispatchCritical(e, "GetNodeFromBSonDocument");
-                    res.SetError(new InternalError($"internalerror:{id.ToString()}"), StatusAction.internalerror);
-                }
-            }
-
-            Json.Append("}");
-            string result = Json.ToString().Replace("\\\\\"", "");
+            var s = node.ToJson();
             try
             {
-                
-                res.datas = JsonConvert.DeserializeObject<T>(result, new JsonSerializerSettings
-                {
-                    DateTimeZoneHandling = DateTimeZoneHandling.Utc,
-                });
+                res.datas = JsonConvert.DeserializeObject<T>(node.ToJson());
             }
             catch (Exception e)
             {
                 string id = await dispatch_error.DispatchCritical(e, "GetNodeFromBSonDocument");
                 res.SetError(new InternalError($"internalerror:{id.ToString()}"), StatusAction.internalerror);
-                return res;
             }
-
             return res;
         }
+
 
 
         async Task<ResultAction<BsonDocument>> GetBsonDocument(object o)
@@ -607,23 +580,23 @@ namespace BeSwarm.WebApi.Core.DBStorage
                     if (property.GetValue(o, null) != null)
                     {
                         var attributes = property.GetCustomAttributes(false);
-                        
+
                         string data = "";
                         System.TypeCode typeCode = Type.GetTypeCode(property.PropertyType);
                         switch (typeCode)
                         {
-                            case TypeCode.DateTime:
-                                DateTime d = DateTime.SpecifyKind((DateTime) property.GetValue(o, null), DateTimeKind.Utc);
-                                doc.Add(property.Name, d);
-                                break;
+                            //case TypeCode.DateTime:
+                            //    DateTime d = DateTime.SpecifyKind((DateTime)property.GetValue(o, null), DateTimeKind.Utc);
+                            //    doc.Add(property.Name, d);
+                            //    break;
                             case TypeCode.String:
                                 doc.Add(property.Name, property.GetValue(o, null).ToString());
                                 break;
                             default:
-                                    BsonDocument sdoc2 = BsonDocument.Parse(
-                                        $"{{ {property.Name}:{JsonConvert.SerializeObject(property.GetValue(o, null), new StringDecimalConverter())}}}");
-                                    doc.AddRange(sdoc2);
-                          
+                                BsonDocument sdoc2 = BsonDocument.Parse(
+                                    $"{{ {property.Name}:{JsonConvert.SerializeObject(property.GetValue(o, null), new StringDecimalConverter())}}}");
+                                doc.AddRange(sdoc2);
+
                                 break;
                         }
                     }
@@ -642,7 +615,7 @@ namespace BeSwarm.WebApi.Core.DBStorage
             return res;
         }
 
-     
+
 
         public async Task<ResultAction> ExecuteQuery(string query, string sessionid, bool strict = true)
         {
@@ -706,7 +679,7 @@ namespace BeSwarm.WebApi.Core.DBStorage
 
                     ResultAction<IMongoDatabase> session = sessions.GetSession(sessionid);
                     result.CopyStatusFrom(session);
-                    if (result.IsOk)  await session.datas.DropCollectionAsync(collectionname);
+                    if (result.IsOk) await session.datas.DropCollectionAsync(collectionname);
                 });
             }
             catch (Exception e)
@@ -735,7 +708,7 @@ namespace BeSwarm.WebApi.Core.DBStorage
 
             foreach (var session in sessions.sessions)
             {
-               
+
                 foreach (var file in files)
                 {
                     logger.LogInformation($"Processing mongodb majschemadb script:{file} db:->{session.Key}");
@@ -783,7 +756,7 @@ namespace BeSwarm.WebApi.Core.DBStorage
                         }
                         else
                         {
-                            BsonDocument res = await collection.FindOneAndUpdateAsync(transaction,filter, update2);
+                            BsonDocument res = await collection.FindOneAndUpdateAsync(transaction, filter, update2);
                         }
 
                     }
@@ -799,19 +772,20 @@ namespace BeSwarm.WebApi.Core.DBStorage
 
         async Task<IDBStorageEngine> IDBStorageEngine.BeginTransaction(string sessionid)
         {
-            if (transaction == null)
+           if (transaction == null)
             {
                 ResultAction<IMongoDatabase> session = sessions.GetSession(sessionid);
                 if (session.IsOk)
                 {
                     transaction = await session.datas.Client.StartSessionAsync();
-                    var options = new TransactionOptions(
-                readConcern: ReadConcern.Snapshot,
-                writeConcern: WriteConcern.WMajority);
+                    var options = new TransactionOptions();
+                    
+                // readConcern: ReadConcern.Snapshot,
+                // writeConcern: WriteConcern.WMajority);
 
                     // Start a transaction
                     transaction.StartTransaction(options);
-                    
+
                 }
             }
             return this;
@@ -820,7 +794,7 @@ namespace BeSwarm.WebApi.Core.DBStorage
         async Task<ResultAction> IDBStorageEngine.CommitTransaction()
         {
             ResultAction res = new();
-            if(transaction == null)
+            if (transaction == null)
             {
                 res.SetError(new InternalError("No session transaction started"), StatusAction.internalerror);
                 return res;
@@ -828,6 +802,7 @@ namespace BeSwarm.WebApi.Core.DBStorage
             else
             {
                 await transaction.CommitTransactionAsync();
+                transaction = null;
             }
             return res;
         }
@@ -843,6 +818,7 @@ namespace BeSwarm.WebApi.Core.DBStorage
             else
             {
                 await transaction.AbortTransactionAsync();
+                transaction = null;
             }
             return res;
         }

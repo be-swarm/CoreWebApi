@@ -18,8 +18,8 @@ namespace BeSwarm.CoreWebApi.Services.DataBase
         Task<ResultAction> AddOrUpdate<T>(T node, Filters query, string sessionid);
         Task<ResultAction> AddIfNotExist<T>(T node, Filters query, string sessionid);
         Task<ResultAction> Add<T>(T node, string sessionid);
-        Task<ResultAction<List<T>>> GetItems<T>(string collectionname, Filters Query, string sessionid);
-        Task<ResultAction<T>> GetItem<T>(string collectionname, Filters Query, string sessionid);
+         Task<ResultAction<List<T>>> GetItems<T>(T node, Filters Query, string sessionid);
+        Task<ResultAction<T>> GetItem<T>(T node, Filters Query, string sessionid);
         Task<ResultAction> Exists(string collectionname, Filters query, string sessionid);
         Task<ResultAction<long>> GetCount(string collectionname, Filters query, string sessionid);
         Task<ResultAction> Delete(string collectionname, Filters query, string sessionid);

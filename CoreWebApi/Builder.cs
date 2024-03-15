@@ -7,6 +7,7 @@ using Microsoft.AspNetCore.Hosting;
 using Serilog.Events;
 using Serilog;
 using Serilog.Sinks.Elasticsearch;
+using Serilog.Sinks.Seq;
 using System.Runtime.InteropServices;
 using BeSwarm.CoreWebApi.Services.Errors;
 using BeSwarm.WebApi.Core.DBStorage;
@@ -27,6 +28,11 @@ using static Org.BouncyCastle.Math.EC.ECCurve;
 using Org.BouncyCastle.Asn1.Cmp;
 using Serilog.Formatting.Elasticsearch;
 using BeSwarm.CoreWebApi.MiddleWare;
+using BeSwarm.CoreWebApi.Services.Crypto;
+using BeSwarm.CoreWebApi.Models;
+using Newtonsoft.Json;
+using Serilog.Context;
+using System.Net;
 
 namespace BeSwarm.CoreWebApi;
 
@@ -89,6 +95,7 @@ public static class Builder
         //
         // Build final logger
         //
+        logger.LogInformation($"****************** config logger *****************");
         CoreEnvironment.env = conf.datas;
         LoggerConfiguration logconf;
         logconf = new LoggerConfiguration();
@@ -108,6 +115,7 @@ public static class Builder
 
         if (CoreEnvironment.env.log.syslog != "")
         {
+            logger.LogInformation($"log to syslog");
             logconf.WriteTo.UdpSyslog(CoreEnvironment.env.log.syslog, CoreEnvironment.env.log.syslogport);
         }
         //
@@ -117,6 +125,7 @@ public static class Builder
         //
         if (CoreEnvironment.env.log.file != "")
         {
+            logger.LogInformation($"log to file");
             logconf.WriteTo.File(CoreEnvironment.env.log.file, rollingInterval: RollingInterval.Infinite,
                 fileSizeLimitBytes: 500000);
         }
@@ -126,6 +135,7 @@ public static class Builder
 
         if (CoreEnvironment.env.log.elastic.host != null) // specified and ok
         {
+            logger.LogInformation($"log to elastic");
             logconf.WriteTo.Elasticsearch(
                 new ElasticsearchSinkOptions(new Uri(CoreEnvironment.env.log.elastic.getconnectionstring()))
                 {
@@ -141,6 +151,7 @@ public static class Builder
 
         if (CoreEnvironment.env.log.kafka.bootstrapservers != null)
         {
+            logger.LogInformation($"log to kafka");
             string certpath = "";
             if (!string.IsNullOrEmpty(CoreEnvironment.env.log.kafka.certsource))
             {
@@ -171,7 +182,7 @@ public static class Builder
                     throw (new Exception($"kafka config: unable to write certsource to {certpath}"));
                 }
             }
-            if (!string.IsNullOrEmpty(certpath))
+            if (string.IsNullOrEmpty(certpath))
             {
                 logconf.WriteTo.Kafka(
                   batchSizeLimit: 50,
@@ -202,7 +213,14 @@ public static class Builder
 
             }
         }
+        // log to seq ?
+        if (CoreEnvironment.env.log.seq.url != null)
+        {
+            logger.LogInformation($"log to seq");
 
+            logconf.WriteTo.Seq(CoreEnvironment.env.log.seq.url, apiKey: CoreEnvironment.env.log.seq.apikey);
+        }
+        Log.CloseAndFlush();
         Log.Logger = logconf.CreateLogger();
         int loglevel;
         switch (CoreEnvironment.env.log.loglevel)
@@ -337,7 +355,7 @@ public static class Builder
         {
             Environment.Exit(-1);
         }
-        if(confkafka.IsOk)
+        if (confkafka.IsOk)
         {
             logger.LogInformation("broker kafka");
             services.AddSingleton<IMessageEvent, KafkaMessageEvent>();
@@ -359,13 +377,13 @@ public static class Builder
         services.AddSingleton<ConfigMail>(confmail.datas);
 
         // Add services to the container.
-        services.AddSingleton<IDispatchCriticalInternalError, DispatchCriticalInternalError>();
+        services.AddSingleton<IDispatchError, DispatchError2Log>();
         services.AddMediatR(typeof(IDBStorageEngine).GetTypeInfo().Assembly);
         services.AddSingleton<SessionsMongoDB>(sessionsmongodb);
         services.AddScoped<IDBStorageEngine, DBStorageEngineMongoDB>();
         services.AddScoped<IDBStorageBridge, DBStorageBridge>();
 
-        
+
         services.AddSingleton<IMailSender, SmtpSender>();
         services.AddSingleton<IMailReader, ImapReader>();
 
@@ -374,6 +392,18 @@ public static class Builder
         services.AddEndpointsApiExplorer();
         //	services.AddSwaggerGen();
         services.AddMvc().AddApplicationPart(typeof(Program).GetTypeInfo().Assembly).AddControllersAsServices();
+
+        //
+        // Cipher
+        //
+        EncryptionKeyProvider kp = new EncryptionKeyProvider();
+        kp.RotateKey("IKOLPa7801OLPIOP131HBG@152!18976");
+        services.AddSingleton<IEncryptionKeyProvider>(kp);
+        services.AddSingleton<IEncryptionService, AesEncryptionService>();
+
+ 
+
+
         return prov;
 
     }

@@ -4,10 +4,10 @@ using System.Threading.Tasks;
 
 namespace BeSwarm.CoreWebApi.Services.Errors
 {
-    public interface IDispatchCriticalInternalError
+    public interface IDispatchError
     {
 
-        public Task<string> DispatchError(Exception ex, string additionnalinfo = "", [CallerMemberName] string memberName = "",
+        public Task<string> DispatchError(InternalError ex, string additionnalinfo = "", [CallerMemberName] string memberName = "",
         [CallerFilePath] string sourceFilePath = "",
         [CallerLineNumber] int sourceLineNumber = 0);
 

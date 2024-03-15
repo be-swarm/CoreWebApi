@@ -23,7 +23,8 @@ public class SwaggerFile
     public string name { get; set; }
 }
 
-public class LogContext
+
+public class LogConfiguration
 {
     public string loglevel { get; set; } = "Information";
     public string syslog { get; set; } = "";
@@ -31,7 +32,13 @@ public class LogContext
     public string file { get; set; } = "";
     public ElasticConfig elastic { get; set; } = new ElasticConfig();
     public KafkaConf kafka { get; set; } = new KafkaConf();
+    public SeqConf seq { get; set; } = new SeqConf();
 
+}
+public class SeqConf
+{
+    public string url { get; set; }
+    [Hidden] public string apikey { get; set; }
 }
 public class KafkaConf
 {
@@ -90,7 +97,7 @@ public class CoreConfiguration
 
     [Len(1, -1)] public string listen { get; set; } = "http://*:5000";
 
-    [Len(1, -1)] public LogContext log { get; set; } = new();
+    [Len(1, -1)] public LogConfiguration log { get; set; } = new();
 
     public List<ConfigDataBase> databases { get; set; } = new();
     [Len(1, -1)][Hidden] public string tokenkeyfile { get; set; } = "";

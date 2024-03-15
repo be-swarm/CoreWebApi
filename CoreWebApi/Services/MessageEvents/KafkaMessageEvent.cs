@@ -70,12 +70,12 @@ namespace BeSwarm.CoreWebApi.Services.MessageEvents
     {
 
         ConfigKafka config;
-        IDispatchCriticalInternalError dispatch_error;
+        IDispatchError dispatch_error;
         string ErrorMessage = "";
         string certpath = "";
         AsyncRetryPolicy policy;
         ILogger<KafkaMessageEvent> _logger;
-        public KafkaMessageEvent(ConfigKafka _config, IDispatchCriticalInternalError _dispatch_error,ILogger<KafkaMessageEvent> logger)
+        public KafkaMessageEvent(ConfigKafka _config, IDispatchError _dispatch_error,ILogger<KafkaMessageEvent> logger)
         {
             config = _config;
             dispatch_error = _dispatch_error;
